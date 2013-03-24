@@ -16,6 +16,7 @@ import urllib
 import json
 import datetime
 import time
+import threading
 
 import pytz
 
@@ -42,12 +43,25 @@ class Nowfm(object):
         now = tracks[0]
         if '@attr' not in now:
             return None
-        self._set_date(now, tracks[1])
-        return now
+        ldate = []
+        t1 = threading.Thread(target=self._thread_calc_date, args=(tracks[1], ldate))
+        t1.start()
 
-    def _set_date(self, now, prev):
+        linfo = []
+        t2 = threading.Thread(target=self._thread_get_track_info, args=(now, linfo))
+        t2.start()
+        t1.join()
+        t2.join()
+
+        info = linfo[0]
+        date = ldate[0]
+        info['@attr'] = now['@attr']
+        info['@date'] = date
+        return info
+
+    def _calc_date(self, prev):
         """
-        現在再生中の曲の再生開始時刻を設定
+        現在再生中の曲の再生開始時刻を計算
 
         1つ前の曲の再生終了時刻は
         1つ前の曲の再生開始時刻+1つ前の曲の演奏時間で求められる
@@ -57,7 +71,6 @@ class Nowfm(object):
         (理由:現在の曲の再生開始時刻が未来にはならないから)
 
         arguments
-        now: 現在再生中の曲
         prev: 1つ前の曲
         """
         now_uts = time.time()
@@ -69,7 +82,15 @@ class Nowfm(object):
         prev_end = prev_start + prev_duration
         # 現在の曲の再生開始時刻のタイムスタンプ
         now_start = min(prev_end, now_uts)
-        now['date'] = {'#text': self.format_date(now_start), 'uts': now_start}
+        return {'#text': self.format_date(now_start), 'uts': now_start}
+
+    def _thread_calc_date(self, prev, ret):
+        """
+        _calc_dateをthread化するためのラッパー
+        ret: thread用の戻り値を0番目に格納
+        """
+        ret.append(self._calc_date(prev))
+        return
 
     def get_track_info(self, track):
         """
@@ -92,6 +113,14 @@ class Nowfm(object):
                 track['name'], track['artist']['#text'])
         jobj = json.loads(urllib.urlopen(url).read())
         return jobj['track']
+
+    def _thread_get_track_info(self, track, ret):
+        """
+        get_track_infoをthread化するためのラッパー
+        ret: thread用の戻り値を0番目に格納
+        """
+        ret.append(self.get_track_info(track))
+        return
 
     def format_date(self, uts):
         """
