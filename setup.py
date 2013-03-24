@@ -13,5 +13,5 @@ setup(
         "Topic :: Software Development :: Libraries"],
     keywords=['Last.fm library'],
     url='https://github.com/cloverrose/nowfm',
-    packages=['nowfm'],
+    py_modules=['nowfm'],
 )
