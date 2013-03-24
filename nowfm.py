@@ -64,14 +64,14 @@ class Nowfm(object):
         # 1つ前の曲の再生開始時刻のタイムスタンプ
         prev_start = int(prev['date']['uts'])
         # 1つ前の曲の演奏時間
-        prev_duration = int(self._get_track_info(prev)['duration']) / 1000
+        prev_duration = int(self.get_track_info(prev)['duration']) / 1000
         # 1つ前の曲の再生終了時刻のタイムスタンプ
         prev_end = prev_start + prev_duration
         # 現在の曲の再生開始時刻のタイムスタンプ
         now_start = min(prev_end, now_uts)
-        now['date'] = {'#text': self._format_date(now_start), 'uts': now_start}
+        now['date'] = {'#text': self.format_date(now_start), 'uts': now_start}
 
-    def _get_track_info(self, track):
+    def get_track_info(self, track):
         """
         user.getrecenttracksで取得した曲の部分的な情報から
         track.getInfoを使って曲の完全な情報を取得する
@@ -93,7 +93,7 @@ class Nowfm(object):
         jobj = json.loads(urllib.urlopen(url).read())
         return jobj['track']
 
-    def _format_date(self, uts):
+    def format_date(self, uts):
         """
         曲の再生開始時刻を表す文字列をLast.fmの形式に合わせて整形する
         UNIX timestamp -> UTC datetime -> formatted UTC datetime
