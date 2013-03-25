@@ -5,7 +5,7 @@ from setuptools import setup
 
 setup(
     name='nowfm',
-    version='0.0.17',
+    version='0.0.21',
     description='nowfm is a library for get nowplaying track information from Last.fm.',
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",

@@ -13,6 +13,7 @@ Last.fmの仕様で現在再生中の曲について、再生開始時刻が取�
 
 # python
 import urllib
+import urllib2
 import json
 import datetime
 import time
@@ -20,6 +21,13 @@ import threading
 
 import pytz
 
+class NowfmError(Exception):
+    def __init__(self, value, detail=""):
+        self.value = value
+        self.detail = detail
+
+    def __str__(self):
+        return repr(self.value)
 
 class Nowfm(object):
     endpoint = 'http://ws.audioscrobbler.com/2.0/'
@@ -36,15 +44,18 @@ class Nowfm(object):
         method = 'user.getrecenttracks'
         url = self.url_template + '&method={0}&limit=1&user={1}'.format(
             method, user)
-        jobj = json.loads(urllib.urlopen(url).read())
+        src = self._get_src(url)
+        jobj = json.loads(src)
         tracks = jobj['recenttracks']['track']
         if type(tracks) is not list:
-            return None
-        now = tracks[0]
-        if '@attr' not in now:
-            return None
+            raise NowfmError("{0} is not currently playing track".format(user),
+                             'type(tracks) is not list')
+        if len(tracks) < 2:
+            raise NowfmError("{0} is not currently playing track".format(user),
+                             "len(tracks) < 2")
+        now, prev = tracks[0], tracks[1]
         ldate = []
-        t1 = threading.Thread(target=self._thread_calc_date, args=(tracks[1], ldate))
+        t1 = threading.Thread(target=self._thread_calc_date, args=(prev, ldate))
         t1.start()
 
         linfo = []
@@ -55,9 +66,21 @@ class Nowfm(object):
 
         info = linfo[0]
         date = ldate[0]
-        info['@attr'] = now['@attr']
+        if '@attr' in now:
+            info['@attr'] = now['@attr']
         info['@date'] = date
         return info
+
+    def _get_src(self, url):
+        opener = urllib2.build_opener()
+        opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+        f = opener.open(url)
+        if f.getcode() == 404:
+            raise NowfmError("404 Not Found")
+        if f.info().gettype() == 'text/xml':
+            raise NowfmError("503 Service Unavailable",
+                             "Last.fm Server returns text/xml")
+        return unicode(f.read(), 'utf-8')
 
     def _calc_date(self, prev):
         """
@@ -77,7 +100,8 @@ class Nowfm(object):
         # 1つ前の曲の再生開始時刻のタイムスタンプ
         prev_start = int(prev['date']['uts'])
         # 1つ前の曲の演奏時間
-        prev_duration = int(self.get_track_info(prev)['duration']) / 1000
+        prev_info = self._get_track_info(prev)
+        prev_duration = int(prev_info['duration']) / 1000
         # 1つ前の曲の再生終了時刻のタイムスタンプ
         prev_end = prev_start + prev_duration
         # 現在の曲の再生開始時刻のタイムスタンプ
@@ -92,7 +116,7 @@ class Nowfm(object):
         ret.append(self._calc_date(prev))
         return
 
-    def get_track_info(self, track):
+    def _get_track_info(self, track):
         """
         user.getrecenttracksで取得した曲の部分的な情報から
         track.getInfoを使って曲の完全な情報を取得する
@@ -111,15 +135,16 @@ class Nowfm(object):
         else:
             url += '&track={0}&artist={1}'.format(
                 track['name'], track['artist']['#text'])
-        jobj = json.loads(urllib.urlopen(url).read())
+        src = self._get_src(url)
+        jobj = json.loads(src)
         return jobj['track']
 
     def _thread_get_track_info(self, track, ret):
         """
-        get_track_infoをthread化するためのラッパー
+        _get_track_infoをthread化するためのラッパー
         ret: thread用の戻り値を0番目に格納
         """
-        ret.append(self.get_track_info(track))
+        ret.append(self._get_track_info(track))
         return
 
     def format_date(self, uts):
