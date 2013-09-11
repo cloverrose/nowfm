@@ -14,6 +14,7 @@ Last.fmの仕様で現在再生中の曲について、再生開始時刻が取�
 # python
 import urllib
 import urllib2
+import httplib
 import json
 import datetime
 import time
@@ -38,6 +39,17 @@ class Nowfm(object):
             Nowfm.endpoint, api_key)
 
     def get_nowplaying(self, user):
+        fmerr = False
+        try:
+            return self._get_nowplaying(user)
+        except NowfmError as e1:
+            fmerr = True
+            raise
+        except Exception as e2:
+            if not fmerr:
+                raise NowfmError("Unknown Error")
+
+    def _get_nowplaying(self, user):
         """
         ユーザーの現在再生中の曲を再生開始時刻情報を付加して返す
         """
@@ -46,7 +58,10 @@ class Nowfm(object):
             method, user)
         src = self._get_src(url)
         jobj = json.loads(src)
-        tracks = jobj['recenttracks']['track']
+        try:
+            tracks = jobj['recenttracks']['track']
+        except KeyError as e:
+            raise NowfmError('KeyError: {0} is invalid form'.format(jobj))
         if type(tracks) is not list:
             raise NowfmError("{0} is not currently playing track".format(user),
                              'type(tracks) is not list')
@@ -72,15 +87,31 @@ class Nowfm(object):
         return info
 
     def _get_src(self, url):
-        opener = urllib2.build_opener()
-        opener.addheaders = [('User-agent', 'Mozilla/5.0')]
-        f = opener.open(url)
+        try:
+            f = urllib.urlopen(url)
+        except httplib.BadStatusLine as e:
+            raise NowfmError("500 Service Unavailable: Last.fm Server returns invalid response")
         if f.getcode() == 404:
             raise NowfmError("404 Not Found")
         if f.info().gettype() == 'text/xml':
             raise NowfmError("503 Service Unavailable",
                              "Last.fm Server returns text/xml")
         return unicode(f.read(), 'utf-8')
+
+    def __get_src(self, url):
+        opener = urllib2.build_opener()
+        opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+        try:
+            f = opener.open(url)
+        except httplib.BadStatusLine as e:
+            raise NowfmError("500 Service Unavailable: Last.fm Server returns invalid response")
+        if f.getcode() == 404:
+            raise NowfmError("404 Not Found")
+        if f.info().gettype() == 'text/xml':
+            raise NowfmError("503 Service Unavailable",
+                             "Last.fm Server returns text/xml")
+        return unicode(f.read(), 'utf-8')
+
 
     def _calc_date(self, prev):
         """
